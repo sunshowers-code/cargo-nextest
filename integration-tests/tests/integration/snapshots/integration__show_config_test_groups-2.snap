@@ -5,6 +5,8 @@ snapshot_kind: text
 ---
 group: flaky (max threads = 4)
     (no matches)
+group: serial (max threads = 1)
+    (no matches)
 group: unused (max threads = 20)
     (no matches)
 group: @global

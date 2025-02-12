@@ -15,7 +15,7 @@ use super::HandleSignalResult;
 use crate::{
     config::{
         EvaluatableProfile, RetryPolicy, ScriptConfig, ScriptId, SetupScriptCommand,
-        SetupScriptExecuteData, SlowTimeout, TestSettings,
+        SetupScriptExecuteData, SlowTimeout, TestGroup, TestSettings,
     },
     double_spawn::DoubleSpawnInfo,
     errors::{ChildError, ChildFdError, ChildStartError, ErrorList},
@@ -33,6 +33,7 @@ use crate::{
     test_output::{CaptureStrategy, ChildExecutionOutput, ChildOutput, ChildSplitOutput},
     time::{PausableSleep, StopwatchStart},
 };
+use future_queue::FutureQueueContext;
 use nextest_metadata::FilterMatch;
 use quick_junit::ReportUuid;
 use rand::{distributions::OpenClosed01, thread_rng, Rng};
@@ -161,6 +162,7 @@ impl<'a> ExecutorContext<'a> {
     pub(super) async fn run_test_instance(
         &self,
         test_instance: TestInstance<'a>,
+        cx: FutureQueueContext,
         settings: TestSettings<'a>,
         resp_tx: UnboundedSender<ExecutorEvent<'a>>,
         setup_script_data: Arc<SetupScriptExecuteData<'a>>,
@@ -174,6 +176,10 @@ impl<'a> ExecutorContext<'a> {
         let mut backoff_iter = BackoffIter::new(retry_policy);
 
         if let FilterMatch::Mismatch { reason } = test_instance.test_info.filter_match {
+            debug_assert!(
+                false,
+                "this test should already have been skipped in a filter step"
+            );
             // Failure to send means the receiver was dropped.
             let _ = resp_tx.send(ExecutorEvent::Skipped {
                 test_instance,
@@ -234,6 +240,7 @@ impl<'a> ExecutorContext<'a> {
             // additional information later.
             let packet = TestPacket {
                 test_instance,
+                cx: cx.clone(),
                 retry_data,
                 settings: settings.clone(),
                 setup_script_data: setup_script_data.clone(),
@@ -619,7 +626,37 @@ impl<'a> ExecutorContext<'a> {
 
         // Debug environment variable for testing.
         command_mut.env("__NEXTEST_ATTEMPT", format!("{}", test.retry_data.attempt));
+
         command_mut.env("NEXTEST_RUN_ID", format!("{}", self.run_id));
+
+        // Set slot environment variables.
+        command_mut.env(
+            "NEXTEST_TEST_GLOBAL_SLOT",
+            test.cx.global_slot().to_string(),
+        );
+        if let Some(group_slot) = test.cx.group_slot() {
+            command_mut.env("NEXTEST_TEST_GROUP_SLOT", group_slot.to_string());
+        } else {
+            command_mut.env_remove("NEXTEST_TEST_GROUP_SLOT");
+        }
+
+        match test.settings.test_group() {
+            TestGroup::Custom(name) => {
+                debug_assert!(
+                    test.cx.group_slot().is_some(),
+                    "test_group being set implies group_slot is set"
+                );
+                command_mut.env("NEXTEST_TEST_GROUP", name.as_str());
+            }
+            TestGroup::Global => {
+                debug_assert!(
+                    test.cx.group_slot().is_none(),
+                    "test_group being unset implies group_slot is unset"
+                );
+                command_mut.env_remove("NEXTEST_TEST_GROUP");
+            }
+        }
+
         command_mut.stdin(Stdio::null());
         test.setup_script_data.apply(
             &test.test_instance.to_test_query(),
@@ -950,6 +987,7 @@ impl UnitPacket<'_> {
 #[derive(Clone, Debug)]
 pub(super) struct TestPacket<'a> {
     test_instance: TestInstance<'a>,
+    cx: FutureQueueContext,
     retry_data: RetryData,
     settings: Arc<TestSettings<'a>>,
     setup_script_data: Arc<SetupScriptExecuteData<'a>>,

@@ -8,6 +8,11 @@ group: flaky (max threads = 4)
       nextest-tests::basic:
           test_flaky_mod_4
           test_flaky_mod_6
+group: serial (max threads = 1)
+  * override for with-retries profile with filter 'test(=test_success) | test(=test_execute_bin)':
+      nextest-tests::basic:
+          test_execute_bin
+          test_success
 group: unused (max threads = 20)
     (no matches)
 group: @global
@@ -24,7 +29,6 @@ group: @global
       nextest-tests::basic:
           test_cargo_env_vars
           test_cwd
-          test_execute_bin
           test_failure_assert
           test_failure_error
           test_failure_should_panic
@@ -32,7 +36,6 @@ group: @global
           test_stdin_closed
           test_subprocess_doesnt_exit
           test_subprocess_doesnt_exit_fail
-          test_success
           test_success_should_panic
       nextest-tests::other:
           other_test_success

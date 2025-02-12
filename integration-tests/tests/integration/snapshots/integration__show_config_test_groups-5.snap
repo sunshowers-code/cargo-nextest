@@ -1,12 +1,14 @@
 ---
 source: integration-tests/tests/integration/main.rs
 expression: with_termination_output.stdout_as_str()
+snapshot_kind: text
 ---
 group: flaky (max threads = 4)
+    (no matches)
+group: serial (max threads = 1)
     (no matches)
 group: unused (max threads = 20)
     (no matches)
 group: @global
   * override for with-termination profile with filter 'test(=test_slow_timeout_2)':
       nextest-tests::basic:
-
