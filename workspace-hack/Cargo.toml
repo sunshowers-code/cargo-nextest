@@ -30,7 +30,6 @@ log = { version = "0.4.25", default-features = false, features = ["std"] }
 memchr = { version = "2.7.4" }
 miette = { version = "7.5.0", features = ["fancy"] }
 num-traits = { version = "0.2.19", default-features = false, features = ["std"] }
-rand = { version = "0.8.5" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa", "hybrid", "meta", "nfa", "perf", "unicode"] }
 regex-syntax = { version = "0.8.5" }
 serde = { version = "1.0.217", features = ["alloc", "derive"] }
