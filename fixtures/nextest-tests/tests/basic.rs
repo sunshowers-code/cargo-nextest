@@ -3,6 +3,8 @@ use std::{env, io::Read, path::PathBuf};
 
 #[test]
 fn test_success() {
+    assert_with_retries_serial();
+
     // Check that MY_ENV_VAR (set by the setup script) isn't enabled.
     assert_eq!(
         std::env::var("MY_ENV_VAR"),
@@ -104,6 +106,7 @@ fn test_ignored_fail() {
 /// Test that a binary can be successfully executed.
 #[test]
 fn test_execute_bin() {
+    assert_with_retries_serial();
     nextest_tests::test_execute_bin_helper();
 }
 
@@ -157,6 +160,11 @@ fn test_cargo_env_vars() {
         .expect("NEXTEST_RUN_ID must be set")
         .parse::<uuid::Uuid>()
         .expect("NEXTEST_RUN_ID must be a UUID");
+    let global_slot = std::env::var("NEXTEST_TEST_GLOBAL_SLOT")
+        .expect("NEXTEST_TEST_GLOBAL_SLOT must be set")
+        .parse::<u64>()
+        .expect("NEXTEST_TEST_GLOBAL_SLOT must be a u64");
+    println!("NEXTEST_TEST_GLOBAL_SLOT = {global_slot}");
 
     assert_eq!(
         std::env::var("NEXTEST_EXECUTION_MODE").as_deref(),
@@ -368,4 +376,21 @@ fn test_stdin_closed() {
             .read(&mut buf)
             .expect("reading from /dev/null succeeded")
     );
+}
+
+/// Asserts that if the with-retries profile is set, the test group slot is 0.
+///
+/// This should be called if and only if the test-group is serial.
+fn assert_with_retries_serial() {
+    let profile = std::env::var("NEXTEST_PROFILE").expect("NEXTEST_PROFILE should be set");
+    if profile == "with-retries" {
+        // Check that NEXTEST_TEST_GROUP_SLOT is set.
+        let group_slot = std::env::var("NEXTEST_TEST_GROUP_SLOT")
+            .expect("NEXTEST_TEST_GROUP_SLOT should be set")
+            .parse::<u64>()
+            .expect("NEXTEST_TEST_GROUP_SLOT should be a u64");
+        println!("NEXTEST_TEST_GROUP_SLOT = {group_slot}");
+        // This test is in a serial group, so the group slot should be 0.
+        assert_eq!(group_slot, 0, "NEXTEST_GROUP_SLOT should be 0");
+    }
 }

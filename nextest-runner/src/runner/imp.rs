@@ -17,8 +17,9 @@ use crate::{
     test_output::CaptureStrategy,
 };
 use async_scoped::TokioScope;
-use future_queue::StreamExt;
+use future_queue::{FutureQueueContext, StreamExt};
 use futures::prelude::*;
+use nextest_metadata::FilterMatch;
 use quick_junit::ReportUuid;
 use std::{convert::Infallible, fmt, sync::Arc};
 use tokio::{
@@ -313,7 +314,32 @@ impl<'a> TestRunnerInner<'a> {
 
             let setup_script_data = Arc::new(script_data);
 
+            let filter_resp_tx = resp_tx.clone();
+
             let run_tests_fut = futures::stream::iter(self.test_list.iter_tests())
+                .filter_map(move |test_instance| {
+                    // Filter tests before assigning a FutureQueueContext to
+                    // them.
+                    //
+                    // Note that this function is called lazily due to the
+                    // `future_queue_grouped` below. This means that skip
+                    // notifications will go out as tests are iterated over, not
+                    // all at once.
+                    let filter_resp_tx = filter_resp_tx.clone();
+                    async move {
+                        if let FilterMatch::Mismatch { reason } =
+                            test_instance.test_info.filter_match
+                        {
+                            // Failure to send means the receiver was dropped.
+                            let _ = filter_resp_tx.send(ExecutorEvent::Skipped {
+                                test_instance,
+                                reason,
+                            });
+                            return None;
+                        }
+                        Some(test_instance)
+                    }
+                })
                 .map(move |test_instance: TestInstance<'a>| {
                     let query = test_instance.to_test_query();
                     let settings = self.profile.settings_for(&query);
@@ -325,53 +351,57 @@ impl<'a> TestRunnerInner<'a> {
                     let resp_tx = resp_tx.clone();
                     let setup_script_data = setup_script_data.clone();
 
-                    // Use a separate Tokio task for each test. For repos with
-                    // lots of small tests, this has been observed to be much
-                    // faster than using a single task for all tests (what we
-                    // used to do). It also provides some degree of per-test
-                    // isolation.
-                    let fut = async move {
-                        // SAFETY: Within an outer scope_and_block (which we
-                        // have here), scope_and_collect is safe as long as the
-                        // returned future isn't forgotten. We're not forgetting
-                        // it below -- we're running it to completion
-                        // immediately.
-                        //
-                        // But recursive scoped calls really feel like pushing
-                        // against the limits of async-scoped. For example,
-                        // there's no way built into async-scoped to propagate a
-                        // cancellation signal from the outer scope to the inner
-                        // scope. (But there could be, right? That seems
-                        // solvable via channels. And we could likely do our own
-                        // channels here.)
-                        let ((), mut ret) = unsafe {
-                            TokioScope::scope_and_collect(move |scope| {
-                                scope.spawn(executor_cx_ref.run_test_instance(
-                                    test_instance,
-                                    settings,
-                                    resp_tx.clone(),
-                                    setup_script_data,
-                                ))
-                            })
-                        }
-                        .await;
+                    let f = move |cx: FutureQueueContext| {
+                        debug!("running test instance: {}; cx: {cx:?}", test_instance.id());
+                        // Use a separate Tokio task for each test. For repos
+                        // with lots of small tests, this has been observed to
+                        // be much faster than using a single task for all tests
+                        // (what we used to do). It also provides some degree of
+                        // per-test isolation.
+                        async move {
+                            // SAFETY: Within an outer scope_and_block (which we
+                            // have here), scope_and_collect is safe as long as
+                            // the returned future isn't forgotten. We're not
+                            // forgetting it below -- we're running it to
+                            // completion immediately.
+                            //
+                            // But recursive scoped calls really feel like
+                            // pushing against the limits of async-scoped. For
+                            // example, there's no way built into async-scoped
+                            // to propagate a cancellation signal from the outer
+                            // scope to the inner scope. (But there could be,
+                            // right? That seems solvable via channels. And we
+                            // could likely do our own channels here.)
+                            let ((), mut ret) = unsafe {
+                                TokioScope::scope_and_collect(move |scope| {
+                                    scope.spawn(executor_cx_ref.run_test_instance(
+                                        test_instance,
+                                        cx,
+                                        settings,
+                                        resp_tx.clone(),
+                                        setup_script_data,
+                                    ))
+                                })
+                            }
+                            .await;
 
-                        // If no future was started, that's really strange.
-                        // Worth at least logging.
-                        let Some(result) = ret.pop() else {
-                            warn!(
-                                "no task was started for test instance: {}",
-                                test_instance.id()
-                            );
-                            return None;
-                        };
-                        match result {
-                            Ok(()) => None,
-                            Err(join_error) => Some(join_error),
+                            // If no future was started, that's really strange.
+                            // Worth at least logging.
+                            let Some(result) = ret.pop() else {
+                                warn!(
+                                    "no task was started for test instance: {}",
+                                    test_instance.id()
+                                );
+                                return None;
+                            };
+                            match result {
+                                Ok(()) => None,
+                                Err(join_error) => Some(join_error),
+                            }
                         }
                     };
 
-                    (threads_required, test_group, fut)
+                    (threads_required, test_group, f)
                 })
                 // future_queue_grouped means tests are spawned in the order
                 // defined, but returned in any order.

@@ -33,6 +33,11 @@ leak-timeout = '1s'
 [profile.with-retries]
 retries = 2
 
+# Test out serial tests.
+[[profile.with-retries.overrides]]
+filter = "test(=test_success) | test(=test_execute_bin)"
+test-group = 'serial'
+
 # Run test_flaky_mod_6 with 5 retries (6 tries) rather than 2.
 [[profile.with-retries.overrides]]
 filter = "test(=test_flaky_mod_6)"
@@ -90,6 +95,9 @@ max-threads = 4
 
 [test-groups.unused]
 max-threads = 20
+
+[test-groups.serial]
+max-threads = 1
 
 [script.my-script-unix]
 command = './scripts/my-script.sh'
