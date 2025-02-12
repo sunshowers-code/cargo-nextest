@@ -384,6 +384,10 @@ fn test_stdin_closed() {
 fn assert_with_retries_serial() {
     let profile = std::env::var("NEXTEST_PROFILE").expect("NEXTEST_PROFILE should be set");
     if profile == "with-retries" {
+        // Check that NEXTEST_TEST_GROUP is set to "serial".
+        let group = std::env::var("NEXTEST_TEST_GROUP").expect("NEXTEST_TEST_GROUP should be set");
+        assert_eq!(group, "serial", "NEXTEST_GROUP should be serial");
+
         // Check that NEXTEST_TEST_GROUP_SLOT is set.
         let group_slot = std::env::var("NEXTEST_TEST_GROUP_SLOT")
             .expect("NEXTEST_TEST_GROUP_SLOT should be set")
@@ -392,5 +396,17 @@ fn assert_with_retries_serial() {
         println!("NEXTEST_TEST_GROUP_SLOT = {group_slot}");
         // This test is in a serial group, so the group slot should be 0.
         assert_eq!(group_slot, 0, "NEXTEST_GROUP_SLOT should be 0");
+    } else {
+        // NEXTEST_TEST_GROUP and NEXTEST_TEST_GROUP_SLOT must not be set.
+        assert_eq!(
+            std::env::var("NEXTEST_TEST_GROUP"),
+            Err(std::env::VarError::NotPresent),
+            "NEXTEST_TEST_GROUP should not be set"
+        );
+        assert_eq!(
+            std::env::var("NEXTEST_TEST_GROUP_SLOT"),
+            Err(std::env::VarError::NotPresent),
+            "NEXTEST_TEST_GROUP_SLOT should not be set"
+        );
     }
 }

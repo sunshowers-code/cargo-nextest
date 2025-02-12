@@ -15,7 +15,7 @@ use super::HandleSignalResult;
 use crate::{
     config::{
         EvaluatableProfile, RetryPolicy, ScriptConfig, ScriptId, SetupScriptCommand,
-        SetupScriptExecuteData, SlowTimeout, TestSettings,
+        SetupScriptExecuteData, SlowTimeout, TestGroup, TestSettings,
     },
     double_spawn::DoubleSpawnInfo,
     errors::{ChildError, ChildFdError, ChildStartError, ErrorList},
@@ -628,13 +628,35 @@ impl<'a> ExecutorContext<'a> {
         command_mut.env("__NEXTEST_ATTEMPT", format!("{}", test.retry_data.attempt));
 
         command_mut.env("NEXTEST_RUN_ID", format!("{}", self.run_id));
+
+        // Set slot environment variables.
         command_mut.env(
             "NEXTEST_TEST_GLOBAL_SLOT",
             test.cx.global_slot().to_string(),
         );
         if let Some(group_slot) = test.cx.group_slot() {
             command_mut.env("NEXTEST_TEST_GROUP_SLOT", group_slot.to_string());
+        } else {
+            command_mut.env_remove("NEXTEST_TEST_GROUP_SLOT");
         }
+
+        match test.settings.test_group() {
+            TestGroup::Custom(name) => {
+                debug_assert!(
+                    test.cx.group_slot().is_some(),
+                    "test_group being set implies group_slot is set"
+                );
+                command_mut.env("NEXTEST_TEST_GROUP", name.as_str());
+            }
+            TestGroup::Global => {
+                debug_assert!(
+                    test.cx.group_slot().is_none(),
+                    "test_group being unset implies group_slot is unset"
+                );
+                command_mut.env_remove("NEXTEST_TEST_GROUP");
+            }
+        }
+
         command_mut.stdin(Stdio::null());
         test.setup_script_data.apply(
             &test.test_instance.to_test_query(),
