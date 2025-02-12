@@ -1000,10 +1000,11 @@ dependencies = [
 
 [[package]]
 name = "future-queue"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0d1aa68ae1a41111c2ebdfec3c73479b55751b0bdceb8e1e3f7a05f3cf6b2e6"
+checksum = "47cdf4a7eef4808ffa1e5c47dbf37124dfe33a7acc34e8568c5d5359b365a8cb"
 dependencies = [
+ "debug-ignore",
  "fnv",
  "futures-util",
  "pin-project-lite",

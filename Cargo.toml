@@ -58,7 +58,7 @@ enable-ansi-support = "0.2.1"
 env_logger = { version = "0.11.6", default-features = false }
 fixture-data = { path = "fixture-data" }
 fs-err = "3.1.0"
-future-queue = "0.3.0"
+future-queue = "0.4.0"
 futures = "0.3.31"
 globset = "0.4.15"
 guppy = "0.17.13"
