@@ -24,15 +24,15 @@ use nextest_runner::{
     errors::{TargetTripleError, WriteTestListError},
     input::InputHandlerKind,
     list::{
-        BinaryList, OutputFormat, RustTestArtifact, SerializableFormat, TestExecuteContext,
-        TestList,
+        BinaryList, OutputFormat, RustBuildMeta, RustTestArtifact, SerializableFormat,
+        TestExecuteContext, TestList, TestListState,
     },
     partition::PartitionerBuilder,
     platform::{BuildPlatforms, HostPlatform, PlatformLibdir, TargetPlatform},
     redact::Redactor,
     reporter::{
         events::{FinalRunStats, RunStatsFailureKind},
-        highlight_end, structured, FinalStatusLevel, ReporterBuilder, StatusLevel,
+        highlight_end, structured, EventAggregator, FinalStatusLevel, ReporterBuilder, StatusLevel,
         TestOutputDisplay, TestOutputErrorSlice,
     },
     reuse_build::{archive_to_file, ArchiveReporter, PathMapper, ReuseBuildInfo},
@@ -611,20 +611,14 @@ impl TestBuildFilter {
         test_filter_builder: TestFilterBuilder,
         env: EnvironmentMap,
         ecx: &EvalContext<'_>,
-        reuse_build: &ReuseBuildInfo,
+        rust_build_meta: RustBuildMeta<TestListState>,
+        path_mapper: &PathMapper,
     ) -> Result<TestList<'g>> {
-        let path_mapper = make_path_mapper(
-            reuse_build,
-            graph,
-            &binary_list.rust_build_meta.target_directory,
-        )?;
-
-        let rust_build_meta = binary_list.rust_build_meta.map_paths(&path_mapper);
         let test_artifacts = RustTestArtifact::from_binary_list(
             graph,
             binary_list,
             &rust_build_meta,
-            &path_mapper,
+            path_mapper,
             self.platform_filter.into(),
         )?;
         TestList::new(
@@ -1420,12 +1414,11 @@ impl BaseApp {
         let binary_list = self.build_binary_list()?;
         let path_mapper = PathMapper::noop();
 
-        let build_platforms = binary_list.rust_build_meta.build_platforms.clone();
         let pcx = ParseContext::new(self.graph());
         let (_, config) = self.load_config(&pcx)?;
         let profile = self
             .load_profile(&config)?
-            .apply_build_platforms(&build_platforms);
+            .into_evaluatable(&binary_list.rust_build_meta.build_platforms);
 
         let redactor = if should_redact() {
             Redactor::build_active(&binary_list.rust_build_meta)
@@ -1502,11 +1495,6 @@ impl BaseApp {
         let profile = config
             .profile(profile_name)
             .map_err(ExpectedError::profile_not_found)?;
-        let store_dir = profile.store_dir();
-        std::fs::create_dir_all(store_dir).map_err(|err| ExpectedError::StoreDirCreateError {
-            store_dir: store_dir.to_owned(),
-            err,
-        })?;
         Ok(profile)
     }
 }
@@ -1569,6 +1557,8 @@ impl App {
         binary_list: Arc<BinaryList>,
         test_filter_builder: TestFilterBuilder,
         ecx: &EvalContext<'_>,
+        rust_build_meta: RustBuildMeta<TestListState>,
+        path_mapper: &PathMapper,
     ) -> Result<TestList> {
         let env = EnvironmentMap::new(&self.base.cargo_configs);
         self.build_filter.compute_test_list(
@@ -1579,7 +1569,8 @@ impl App {
             test_filter_builder,
             env,
             ecx,
-            &self.base.reuse_build,
+            rust_build_meta,
+            path_mapper,
         )
     }
 
@@ -1617,7 +1608,7 @@ impl App {
                     .base
                     .load_runner(&binary_list.rust_build_meta.build_platforms);
                 let profile =
-                    profile.apply_build_platforms(&binary_list.rust_build_meta.build_platforms);
+                    profile.into_evaluatable(&binary_list.rust_build_meta.build_platforms);
                 let ctx = TestExecuteContext {
                     profile_name: profile.name(),
                     double_spawn,
@@ -1625,8 +1616,21 @@ impl App {
                 };
                 let ecx = profile.filterset_ecx();
 
-                let test_list =
-                    self.build_test_list(&ctx, binary_list, test_filter_builder, &ecx)?;
+                let path_mapper = make_path_mapper(
+                    &self.base.reuse_build,
+                    self.base.graph(),
+                    &binary_list.rust_build_meta.target_directory,
+                )?;
+                let rust_build_meta = binary_list.rust_build_meta.map_paths(&path_mapper);
+
+                let test_list = self.build_test_list(
+                    &ctx,
+                    binary_list,
+                    test_filter_builder,
+                    &ecx,
+                    rust_build_meta,
+                    &path_mapper,
+                )?;
 
                 let mut writer = output_writer.stdout_writer();
                 test_list.write(
@@ -1673,7 +1677,7 @@ impl App {
 
         let double_spawn = self.base.load_double_spawn();
         let target_runner = self.base.load_runner(&build_platforms);
-        let profile = profile.apply_build_platforms(&build_platforms);
+        let profile = profile.into_evaluatable(&build_platforms);
         let ctx = TestExecuteContext {
             profile_name: profile.name(),
             double_spawn,
@@ -1681,7 +1685,21 @@ impl App {
         };
         let ecx = profile.filterset_ecx();
 
-        let test_list = self.build_test_list(&ctx, binary_list, test_filter_builder, &ecx)?;
+        let path_mapper = make_path_mapper(
+            &self.base.reuse_build,
+            self.base.graph(),
+            &binary_list.rust_build_meta.target_directory,
+        )?;
+        let rust_build_meta = binary_list.rust_build_meta.map_paths(&path_mapper);
+
+        let test_list = self.build_test_list(
+            &ctx,
+            binary_list,
+            test_filter_builder,
+            &ecx,
+            rust_build_meta,
+            &path_mapper,
+        )?;
 
         let mut writer = output_writer.stdout_writer();
 
@@ -1712,7 +1730,8 @@ impl App {
         let (version_only_config, config) = self.base.load_config(&pcx)?;
         let profile = self.base.load_profile(&config)?;
 
-        // Construct this here so that errors are reported before the build step.
+        // Construct this here so that errors are reported before the build
+        // step.
         let mut structured_reporter = structured::StructuredReporter::new();
         match reporter_opts.message_format {
             MessageFormat::Human => {}
@@ -1752,11 +1771,25 @@ impl App {
         let test_filter_builder = self.build_filter.make_test_filter_builder(filter_exprs)?;
 
         let binary_list = self.base.build_binary_list()?;
-        let build_platforms = &binary_list.rust_build_meta.build_platforms.clone();
-        let double_spawn = self.base.load_double_spawn();
-        let target_runner = self.base.load_runner(build_platforms);
+        let path_mapper = make_path_mapper(
+            &self.base.reuse_build,
+            self.base.graph(),
+            &binary_list.rust_build_meta.target_directory,
+        )?;
+        let rust_build_meta = binary_list.rust_build_meta.map_paths(&path_mapper);
 
-        let profile = profile.apply_build_platforms(build_platforms);
+        let profile = profile.into_evaluatable(&binary_list.rust_build_meta.build_platforms);
+
+        // This is the earliest point where we can create the aggregator, since
+        // we need the remapped target directory which is only available after
+        // the test list is built.
+        let aggregator = EventAggregator::new(&profile, &rust_build_meta.target_directory)?;
+
+        let double_spawn = self.base.load_double_spawn();
+        let target_runner = self
+            .base
+            .load_runner(&binary_list.rust_build_meta.build_platforms);
+
         let ctx = TestExecuteContext {
             profile_name: profile.name(),
             double_spawn,
@@ -1764,7 +1797,14 @@ impl App {
         };
         let ecx = profile.filterset_ecx();
 
-        let test_list = self.build_test_list(&ctx, binary_list, test_filter_builder, &ecx)?;
+        let test_list = self.build_test_list(
+            &ctx,
+            binary_list,
+            test_filter_builder,
+            &ecx,
+            rust_build_meta,
+            &path_mapper,
+        )?;
 
         let output = output_writer.reporter_output();
         let should_colorize = self
@@ -1805,7 +1845,13 @@ impl App {
         let mut reporter = reporter_opts
             .to_builder(no_capture, should_colorize)
             .set_verbose(self.base.output.verbose)
-            .build(&test_list, &profile, output, structured_reporter);
+            .build(
+                &test_list,
+                &profile,
+                output,
+                aggregator,
+                structured_reporter,
+            );
 
         configure_handle_inheritance(no_capture)?;
         let run_stats = runner.try_execute(|event| {

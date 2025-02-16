@@ -683,7 +683,7 @@ mod tests {
         let profile = nextest_config_result
             .profile("default")
             .expect("valid profile name")
-            .apply_build_platforms(&build_platforms());
+            .into_evaluatable(&build_platforms());
 
         // This query matches the foo and bar scripts.
         let host_binary_query =

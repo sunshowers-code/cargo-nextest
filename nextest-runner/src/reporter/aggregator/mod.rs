@@ -6,4 +6,4 @@
 mod imp;
 mod junit;
 
-pub(crate) use imp::*;
+pub use imp::*;

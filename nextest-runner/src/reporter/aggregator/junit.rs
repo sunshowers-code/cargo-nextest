@@ -5,7 +5,7 @@
 
 use crate::{
     config::{JunitConfig, ScriptId},
-    errors::{DisplayErrorChain, WriteEventError},
+    errors::{DisplayErrorChain, JunitSetupError, WriteEventError},
     list::TestInstanceId,
     reporter::{
         events::{ExecutionDescription, ExecutionResult, TestEvent, TestEventKind, UnitKind},
@@ -13,6 +13,7 @@ use crate::{
     },
     test_output::{ChildExecutionOutput, ChildOutput},
 };
+use camino::Utf8PathBuf;
 use debug_ignore::DebugIgnore;
 use indexmap::IndexMap;
 use nextest_metadata::RustBinaryId;
@@ -28,16 +29,28 @@ static PROCESS_FAILED_TO_START: &str = "(process failed to start)";
 
 #[derive(Clone, Debug)]
 pub(super) struct MetadataJunit<'cfg> {
+    junit_path: Utf8PathBuf,
     config: JunitConfig<'cfg>,
     test_suites: DebugIgnore<IndexMap<SuiteKey<'cfg>, TestSuite>>,
 }
 
 impl<'cfg> MetadataJunit<'cfg> {
-    pub(super) fn new(config: JunitConfig<'cfg>) -> Self {
-        Self {
+    pub(super) fn new(
+        store_dir: Utf8PathBuf,
+        config: JunitConfig<'cfg>,
+    ) -> Result<Self, JunitSetupError> {
+        let junit_path = config.path(&store_dir);
+        let junit_dir = junit_path.parent().expect("junit path must have a parent");
+        std::fs::create_dir_all(junit_dir).map_err(|error| JunitSetupError::CreateStoreDir {
+            path: junit_dir.to_path_buf(),
+            error,
+        })?;
+
+        Ok(Self {
+            junit_path,
             config,
             test_suites: DebugIgnore(IndexMap::new()),
-        }
+        })
     }
 
     pub(super) fn write_event(&mut self, event: TestEvent<'cfg>) -> Result<(), WriteEventError> {
@@ -207,21 +220,14 @@ impl<'cfg> MetadataJunit<'cfg> {
                     .set_time(elapsed)
                     .add_test_suites(self.test_suites.drain(..).map(|(_, testsuite)| testsuite));
 
-                let junit_path = self.config.path();
-                let junit_dir = junit_path.parent().expect("junit path must have a parent");
-                std::fs::create_dir_all(junit_dir).map_err(|error| WriteEventError::Fs {
-                    file: junit_dir.to_path_buf(),
-                    error,
-                })?;
-
-                let f = File::create(junit_path).map_err(|error| WriteEventError::Fs {
-                    file: junit_path.to_path_buf(),
+                let f = File::create(&self.junit_path).map_err(|error| WriteEventError::Fs {
+                    file: self.junit_path.clone(),
                     error,
                 })?;
                 report
                     .serialize(f)
                     .map_err(|error| WriteEventError::Junit {
-                        file: junit_path.to_path_buf(),
+                        file: self.junit_path.clone(),
                         error,
                     })?;
             }

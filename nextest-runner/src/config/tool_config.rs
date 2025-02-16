@@ -221,7 +221,7 @@ mod tests {
         let default_profile = config
             .profile(NextestConfig::DEFAULT_PROFILE)
             .expect("default profile is present")
-            .apply_build_platforms(&build_platforms());
+            .into_evaluatable(&build_platforms());
         // This is present in .config/nextest.toml and is the highest priority
         assert_eq!(default_profile.retries(), RetryPolicy::new_without_delay(3));
 
@@ -285,7 +285,7 @@ mod tests {
         let tool_profile = config
             .profile("tool")
             .expect("tool profile is present")
-            .apply_build_platforms(&build_platforms());
+            .into_evaluatable(&build_platforms());
         assert_eq!(tool_profile.retries(), RetryPolicy::new_without_delay(12));
         assert_eq!(
             tool_profile.settings_for(&test_foo_query).retries(),
@@ -306,7 +306,7 @@ mod tests {
         let tool2_profile = config
             .profile("tool2")
             .expect("tool2 profile is present")
-            .apply_build_platforms(&build_platforms());
+            .into_evaluatable(&build_platforms());
         assert_eq!(tool2_profile.retries(), RetryPolicy::new_without_delay(18));
         assert_eq!(
             tool2_profile.settings_for(&test_foo_query).retries(),

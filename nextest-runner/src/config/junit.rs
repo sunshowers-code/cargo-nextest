@@ -17,7 +17,6 @@ pub struct JunitConfig<'cfg> {
 
 impl<'cfg> JunitConfig<'cfg> {
     pub(super) fn new(
-        store_dir: &Utf8Path,
         custom_data: Option<&'cfg JunitImpl>,
         default_data: &'cfg DefaultJunitImpl,
     ) -> Option<Self> {
@@ -27,7 +26,6 @@ impl<'cfg> JunitConfig<'cfg> {
             .as_deref();
 
         path.map(|path| {
-            let path = store_dir.join(path);
             let report_name = custom_data
                 .and_then(|custom| custom.report_name.as_deref())
                 .unwrap_or(&default_data.report_name);
@@ -38,7 +36,7 @@ impl<'cfg> JunitConfig<'cfg> {
                 .and_then(|custom| custom.store_failure_output)
                 .unwrap_or(default_data.store_failure_output);
             Self {
-                path,
+                path: path.to_owned(),
                 report_name,
                 store_success_output,
                 store_failure_output,
@@ -47,8 +45,8 @@ impl<'cfg> JunitConfig<'cfg> {
     }
 
     /// Returns the absolute path to the JUnit report.
-    pub fn path(&self) -> &Utf8Path {
-        &self.path
+    pub fn path(&self, store_dir: &Utf8Path) -> Utf8PathBuf {
+        store_dir.join(&self.path)
     }
 
     /// Returns the name of the JUnit report.

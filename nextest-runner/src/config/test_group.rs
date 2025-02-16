@@ -218,7 +218,7 @@ mod tests {
             Ok(expected_groups) => {
                 let config = config_res.expect("config is valid");
                 let profile = config.profile("default").expect("default profile is known");
-                let profile = profile.apply_build_platforms(&build_platforms());
+                let profile = profile.into_evaluatable(&build_platforms());
                 assert_eq!(
                     profile
                         .test_group_config()
@@ -307,7 +307,7 @@ mod tests {
             Ok(expected_groups) => {
                 let config = config_res.expect("config is valid");
                 let profile = config.profile("default").expect("default profile is known");
-                let profile = profile.apply_build_platforms(&build_platforms());
+                let profile = profile.into_evaluatable(&build_platforms());
                 assert_eq!(
                     profile
                         .test_group_config()

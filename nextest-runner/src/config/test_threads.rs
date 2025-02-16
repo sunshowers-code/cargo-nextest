@@ -171,7 +171,7 @@ mod tests {
                     .unwrap()
                     .profile("custom")
                     .unwrap()
-                    .apply_build_platforms(&build_platforms())
+                    .into_evaluatable(&build_platforms())
                     .custom_profile()
                     .unwrap()
                     .test_threads()

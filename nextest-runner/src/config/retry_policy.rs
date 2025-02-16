@@ -219,7 +219,7 @@ mod tests {
             config
                 .profile("default")
                 .expect("default profile exists")
-                .apply_build_platforms(&build_platforms())
+                .into_evaluatable(&build_platforms())
                 .retries(),
             RetryPolicy::Fixed {
                 count: 3,
@@ -233,7 +233,7 @@ mod tests {
             config
                 .profile("no-retries")
                 .expect("profile exists")
-                .apply_build_platforms(&build_platforms())
+                .into_evaluatable(&build_platforms())
                 .retries(),
             RetryPolicy::new_without_delay(0),
             "no-retries retries matches"
@@ -243,7 +243,7 @@ mod tests {
             config
                 .profile("fixed-with-delay")
                 .expect("profile exists")
-                .apply_build_platforms(&build_platforms())
+                .into_evaluatable(&build_platforms())
                 .retries(),
             RetryPolicy::Fixed {
                 count: 3,
@@ -257,7 +257,7 @@ mod tests {
             config
                 .profile("exp")
                 .expect("profile exists")
-                .apply_build_platforms(&build_platforms())
+                .into_evaluatable(&build_platforms())
                 .retries(),
             RetryPolicy::Exponential {
                 count: 4,
@@ -272,7 +272,7 @@ mod tests {
             config
                 .profile("exp-with-max-delay")
                 .expect("profile exists")
-                .apply_build_platforms(&build_platforms())
+                .into_evaluatable(&build_platforms())
                 .retries(),
             RetryPolicy::Exponential {
                 count: 5,
@@ -287,7 +287,7 @@ mod tests {
             config
                 .profile("exp-with-max-delay-and-jitter")
                 .expect("profile exists")
-                .apply_build_platforms(&build_platforms())
+                .into_evaluatable(&build_platforms())
                 .retries(),
             RetryPolicy::Exponential {
                 count: 6,
@@ -637,7 +637,7 @@ mod tests {
         let profile = config
             .profile("ci")
             .expect("ci profile is defined")
-            .apply_build_platforms(&build_platforms());
+            .into_evaluatable(&build_platforms());
         let settings_for = profile.settings_for(&query);
         assert_eq!(
             settings_for.retries(),

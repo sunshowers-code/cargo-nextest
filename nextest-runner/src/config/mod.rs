@@ -31,6 +31,7 @@ mod priority;
 mod retry_policy;
 mod scripts;
 mod slow_timeout;
+mod store;
 mod test_group;
 mod test_threads;
 mod threads_required;

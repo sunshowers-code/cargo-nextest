@@ -258,7 +258,7 @@ mod tests {
         let profile = config
             .profile("custom")
             .unwrap()
-            .apply_build_platforms(&build_platforms());
+            .into_evaluatable(&build_platforms());
 
         assert_eq!(profile.max_fail(), expected);
     }
