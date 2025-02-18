@@ -80,9 +80,12 @@ impl NextestConfig {
     /// The name of the default profile used for miri.
     pub const DEFAULT_MIRI_PROFILE: &'static str = "default-miri";
 
+    /// The name of the default profile used for cargo-llvm-cov
+    pub const DEFAULT_LLVM_COV_PROFILE: &'static str = "default-llvm-cov";
+
     /// A list containing the names of the Nextest defined reserved profile names.
     pub const DEFAULT_PROFILES: &'static [&'static str] =
-        &[Self::DEFAULT_PROFILE, Self::DEFAULT_MIRI_PROFILE];
+        &[Self::DEFAULT_PROFILE, Self::DEFAULT_MIRI_PROFILE, Self::DEFAULT_LLVM_COV_PROFILE];
 
     /// Reads the nextest config from the given file, or if not specified from `.config/nextest.toml`
     /// in the workspace root.

@@ -1495,6 +1495,8 @@ impl BaseApp {
             // https://github.com/rust-lang/miri/pull/2398#issuecomment-1190747685
             if std::env::var_os("MIRI_SYSROOT").is_some() {
                 NextestConfig::DEFAULT_MIRI_PROFILE
+            } else if std::env::var_os("CARGO_LLVM_COV").is_some() {
+                NextestConfig::DEFAULT_LLVM_COV_PROFILE
             } else {
                 NextestConfig::DEFAULT_PROFILE
             }
