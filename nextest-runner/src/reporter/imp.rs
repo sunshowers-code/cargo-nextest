@@ -104,10 +104,9 @@ impl ReporterBuilder {
         test_list: &TestList,
         profile: &EvaluatableProfile<'a>,
         output: ReporterStderr<'a>,
+        aggregator: EventAggregator<'a>,
         structured_reporter: StructuredReporter<'a>,
     ) -> Reporter<'a> {
-        let aggregator = EventAggregator::new(profile);
-
         let status_level = self.status_level.unwrap_or_else(|| profile.status_level());
         let final_status_level = self
             .final_status_level

@@ -307,7 +307,7 @@ mod tests {
             config
                 .profile("default")
                 .expect("default profile exists")
-                .apply_build_platforms(&build_platforms())
+                .into_evaluatable(&build_platforms())
                 .archive_config(),
             &default_config,
             "default matches"
@@ -317,7 +317,7 @@ mod tests {
             config
                 .profile("profile1")
                 .expect("profile exists")
-                .apply_build_platforms(&build_platforms())
+                .into_evaluatable(&build_platforms())
                 .archive_config(),
             &ArchiveConfig {
                 include: vec![ArchiveInclude {
@@ -334,7 +334,7 @@ mod tests {
             config
                 .profile("profile2")
                 .expect("default profile exists")
-                .apply_build_platforms(&build_platforms())
+                .into_evaluatable(&build_platforms())
                 .archive_config(),
             &ArchiveConfig { include: vec![] },
             "profile2 matches"
@@ -344,7 +344,7 @@ mod tests {
             config
                 .profile("profile3")
                 .expect("default profile exists")
-                .apply_build_platforms(&build_platforms())
+                .into_evaluatable(&build_platforms())
                 .archive_config(),
             &default_config,
             "profile3 matches"

@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use super::{
-    ArchiveConfig, CompiledByProfile, CompiledData, CompiledDefaultFilter, ConfigExperimental,
-    CustomTestGroup, DefaultJunitImpl, DeserializedOverride, DeserializedProfileScriptConfig,
-    JunitConfig, JunitImpl, MaxFail, NextestVersionDeserialize, RetryPolicy, ScriptConfig,
-    ScriptId, SettingSource, SetupScripts, SlowTimeout, TestGroup, TestGroupConfig, TestSettings,
-    TestThreads, ThreadsRequired, ToolConfigFile,
+    store::StoreConfigImpl, ArchiveConfig, CompiledByProfile, CompiledData, CompiledDefaultFilter,
+    ConfigExperimental, CustomTestGroup, DefaultJunitImpl, DeserializedOverride,
+    DeserializedProfileScriptConfig, JunitConfig, JunitImpl, MaxFail, NextestVersionDeserialize,
+    RetryPolicy, ScriptConfig, ScriptId, SettingSource, SetupScripts, SlowTimeout, TestGroup,
+    TestGroupConfig, TestSettings, TestThreads, ThreadsRequired, ToolConfigFile,
 };
 use crate::{
     errors::{
@@ -512,11 +512,7 @@ impl NextestConfig {
     fn make_profile(&self, name: &str) -> Result<EarlyProfile<'_>, ProfileNotFound> {
         let custom_profile = self.inner.get_profile(name)?;
 
-        // The profile was found: construct it.
-        let mut store_dir = self.workspace_root.join(&self.inner.store.dir);
-        store_dir.push(name);
-
-        // Grab the compiled data as well.
+        // Grab the compiled data.
         let compiled_data = match self.compiled.other.get(name) {
             Some(data) => data.clone().chain(self.compiled.default.clone()),
             None => self.compiled.default.clone(),
@@ -524,7 +520,8 @@ impl NextestConfig {
 
         Ok(EarlyProfile {
             name: name.to_owned(),
-            store_dir,
+            workspace_root: self.workspace_root.clone(),
+            store: self.inner.store.clone(),
             default_profile: &self.inner.default_profile,
             custom_profile,
             test_groups: &self.inner.test_groups,
@@ -589,7 +586,8 @@ pub(crate) struct FinalConfig {
 /// Returned by [`NextestConfig::profile`].
 pub struct EarlyProfile<'cfg> {
     name: String,
-    store_dir: Utf8PathBuf,
+    workspace_root: Utf8PathBuf,
+    store: StoreConfigImpl,
     default_profile: &'cfg DefaultProfileImpl,
     custom_profile: Option<&'cfg CustomProfileImpl>,
     test_groups: &'cfg BTreeMap<CustomTestGroup, TestGroupConfig>,
@@ -600,11 +598,6 @@ pub struct EarlyProfile<'cfg> {
 }
 
 impl<'cfg> EarlyProfile<'cfg> {
-    /// Returns the absolute profile-specific store directory.
-    pub fn store_dir(&self) -> &Utf8Path {
-        &self.store_dir
-    }
-
     /// Returns the global test group configuration.
     pub fn test_group_config(&self) -> &'cfg BTreeMap<CustomTestGroup, TestGroupConfig> {
         self.test_groups
@@ -614,10 +607,7 @@ impl<'cfg> EarlyProfile<'cfg> {
     ///
     /// This is a separate step from parsing the config and reading a profile so that cargo-nextest
     /// can tell users about configuration parsing errors before building the binary list.
-    pub fn apply_build_platforms(
-        self,
-        build_platforms: &BuildPlatforms,
-    ) -> EvaluatableProfile<'cfg> {
+    pub fn into_evaluatable(self, build_platforms: &BuildPlatforms) -> EvaluatableProfile<'cfg> {
         let compiled_data = self.compiled_data.apply_build_platforms(build_platforms);
 
         let resolved_default_filter = {
@@ -639,7 +629,8 @@ impl<'cfg> EarlyProfile<'cfg> {
 
         EvaluatableProfile {
             name: self.name,
-            store_dir: self.store_dir,
+            workspace_root: self.workspace_root,
+            store: self.store,
             default_profile: self.default_profile,
             custom_profile: self.custom_profile,
             scripts: self.scripts,
@@ -652,11 +643,12 @@ impl<'cfg> EarlyProfile<'cfg> {
 
 /// A configuration profile for nextest. Contains most configuration used by the nextest runner.
 ///
-/// Returned by [`EarlyProfile::apply_build_platforms`].
+/// Returned by [`EarlyProfile::into_evaluatable`].
 #[derive(Clone, Debug)]
 pub struct EvaluatableProfile<'cfg> {
     name: String,
-    store_dir: Utf8PathBuf,
+    workspace_root: Utf8PathBuf,
+    store: StoreConfigImpl,
     default_profile: &'cfg DefaultProfileImpl,
     custom_profile: Option<&'cfg CustomProfileImpl>,
     test_groups: &'cfg BTreeMap<CustomTestGroup, TestGroupConfig>,
@@ -676,8 +668,17 @@ impl<'cfg> EvaluatableProfile<'cfg> {
     }
 
     /// Returns the absolute profile-specific store directory.
-    pub fn store_dir(&self) -> &Utf8Path {
-        &self.store_dir
+    ///
+    /// The target directory must be provided.
+    ///
+    /// The store directory might not exist yet. The caller is responsible for
+    /// creating it.
+    pub fn store_dir(&self, target_dir: &Utf8Path) -> Utf8PathBuf {
+        let mut store_dir = self
+            .store
+            .resolve_store_dir(&self.workspace_root, target_dir);
+        store_dir.push(&self.name);
+        store_dir
     }
 
     /// Returns the context in which to evaluate filtersets.
@@ -808,7 +809,6 @@ impl<'cfg> EvaluatableProfile<'cfg> {
     /// Returns the JUnit configuration for this profile.
     pub fn junit(&self) -> Option<JunitConfig<'cfg>> {
         JunitConfig::new(
-            self.store_dir(),
             self.custom_profile.map(|p| &p.junit),
             &self.default_profile.junit,
         )
@@ -899,12 +899,6 @@ impl NextestConfigDeserialize {
             other_profiles: self.profiles,
         }
     }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct StoreConfigImpl {
-    dir: Utf8PathBuf,
 }
 
 #[derive(Clone, Debug)]

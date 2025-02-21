@@ -183,7 +183,7 @@ mod tests {
                 let profile = config
                     .profile("custom")
                     .unwrap()
-                    .apply_build_platforms(&build_platforms());
+                    .into_evaluatable(&build_platforms());
 
                 let test_threads = profile.test_threads().compute();
                 let threads_required = profile.threads_required().compute(test_threads);

@@ -494,7 +494,7 @@ mod tests {
         let build_platforms = BuildPlatforms::new_with_no_target().unwrap();
         let signal_handler = SignalHandlerKind::Noop;
         let input_handler = InputHandlerKind::Noop;
-        let profile = profile.apply_build_platforms(&build_platforms);
+        let profile = profile.into_evaluatable(&build_platforms);
         let runner = builder
             .build(
                 &test_list,

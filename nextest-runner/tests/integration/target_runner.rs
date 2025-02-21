@@ -242,7 +242,7 @@ fn test_run_with_target_runner() -> Result<()> {
     let profile = config
         .profile(NextestConfig::DEFAULT_PROFILE)
         .expect("default config is valid")
-        .apply_build_platforms(&build_platforms);
+        .into_evaluatable(&build_platforms);
 
     let runner = TestRunnerBuilder::default();
     let runner = runner

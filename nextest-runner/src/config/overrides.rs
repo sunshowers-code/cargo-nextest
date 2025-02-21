@@ -958,7 +958,7 @@ mod tests {
         let profile = nextest_config_result
             .profile("default")
             .expect("valid profile name")
-            .apply_build_platforms(&build_platforms());
+            .into_evaluatable(&build_platforms());
 
         // This query matches override 2.
         let host_binary_query =
@@ -1289,7 +1289,7 @@ mod tests {
         let profile = nextest_config
             .profile("default")
             .expect("valid profile name")
-            .apply_build_platforms(&build_platforms);
+            .into_evaluatable(&build_platforms);
 
         // Check that the override is correctly applied.
         let target_binary_query = binary_query(

@@ -69,11 +69,10 @@ pub enum ExpectedError {
         #[from]
         err: ProfileNotFound,
     },
-    #[error("failed to create store directory")]
-    StoreDirCreateError {
-        store_dir: Utf8PathBuf,
-        #[source]
-        err: std::io::Error,
+    #[error("junit setup error")]
+    JunitSetupError {
+        #[from]
+        err: JunitSetupError,
     },
     #[error("cargo config error")]
     CargoConfigError {
@@ -395,7 +394,7 @@ impl ExpectedError {
             | Self::SetCurrentDirFailed { .. }
             | Self::GetCurrentExeFailed { .. }
             | Self::ProfileNotFound { .. }
-            | Self::StoreDirCreateError { .. }
+            | Self::JunitSetupError { .. }
             | Self::RootManifestNotFound { .. }
             | Self::CargoConfigError { .. }
             | Self::TestFilterBuilderError { .. }
@@ -521,12 +520,9 @@ impl ExpectedError {
                 );
                 None
             }
-            Self::StoreDirCreateError { store_dir, err } => {
-                error!(
-                    "failed to create store dir at `{}`",
-                    store_dir.style(styles.bold)
-                );
-                Some(err as &dyn Error)
+            Self::JunitSetupError { err } => {
+                error!("{}", err);
+                err.source()
             }
             Self::CargoConfigError { err } => {
                 error!("{}", err);
